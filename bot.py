@@ -835,8 +835,9 @@ async def stop_active_chat(message: Message):
     else:
         await message.answer(tr(lang, "no_active_chat"))
 
-@dp.message(F.private)
+@dp.message(F.chat.type == "private")
 async def private_messages_router(message: Message):
+
     """
     In private:
     - if admin and has ACTIVE_TICKET -> send to client
@@ -880,16 +881,16 @@ async def private_messages_router(message: Message):
             await message.answer(f"❌ Не вдалося надіслати клієнту.\nПомилка: {type(e).__name__}: {e}")
         return
 
-    @dp.message(Command("ticket"))
-    async def ticket_info(message: Message):
-        if not is_admin(message.from_user.id):
-            return
-        ticket_id = ACTIVE_TICKET.get(message.from_user.id)
-        if not ticket_id:
-            await message.answer("ACTIVE_TICKET: None (натисни ✉️ Rispondi на тікеті в групі)")
-            return
-        t = await get_ticket(ticket_id)
-        await message.answer(f"TICKET: {t}")
+@dp.message(Command("ticket"))
+async def ticket_info(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    ticket_id = ACTIVE_TICKET.get(message.from_user.id)
+    if not ticket_id:
+        await message.answer("ACTIVE_TICKET: None (натисни ✉️ Rispondi на тікеті в групі)")
+        return
+    t = await get_ticket(ticket_id)
+    await message.answer(f"TICKET: {t}")
 
     # client in private: continue conversation if ticket open, else show menu
     lang = await get_lang(message.from_user.id)
