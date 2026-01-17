@@ -3,7 +3,7 @@ import asyncio
 import logging
 import random
 import string
-from datetime import datetime
+from datetime import datetime, UTC
 
 import aiosqlite
 from dotenv import load_dotenv
@@ -263,7 +263,7 @@ def choose_whatsapp_for_client(tg_id: int) -> str:
     return WA1 if (tg_id % 2 == 0) else WA2
 
 def gen_ticket_id() -> str:
-    year = datetime.utcnow().year
+    year = datetime.now(UTC).year
     num = "".join(random.choice(string.digits) for _ in range(6))
     return f"DD-{year}-{num}"
 
@@ -327,7 +327,7 @@ async def get_lang(user_id: int) -> str:
     return "it"
 
 async def upsert_client(tg_id: int, phone: str | None, surname: str | None, name: str | None, lang: str | None):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("SELECT tg_id FROM clients WHERE tg_id=?", (tg_id,))
         existing = await cur.fetchone()
@@ -346,7 +346,7 @@ async def upsert_client(tg_id: int, phone: str | None, surname: str | None, name
 
 async def create_ticket(client_tg_id: int, service: str) -> str:
     ticket_id = gen_ticket_id()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO tickets (ticket_id, client_tg_id, service, status, assigned_operator_id, created_at, updated_at)
@@ -374,13 +374,13 @@ async def get_open_ticket_by_client(client_tg_id: int):
         return await cur.fetchone()
 
 async def set_ticket_status(ticket_id: str, status: str):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE tickets SET status=?, updated_at=? WHERE ticket_id=?", (status, now, ticket_id))
         await db.commit()
 
 async def assign_ticket(ticket_id: str, operator_id: int):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         # allow claim if NULL only
         await db.execute("""
@@ -391,7 +391,7 @@ async def assign_ticket(ticket_id: str, operator_id: int):
         await db.commit()
 
 async def log_message(ticket_id: str, from_role: str, text: str):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO messages (ticket_id, from_role, text, created_at)
