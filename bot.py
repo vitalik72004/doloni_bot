@@ -835,51 +835,7 @@ async def stop_active_chat(message: Message):
     else:
         await message.answer(tr(lang, "no_active_chat"))
 
-@dp.message(F.chat.type == "private")
-async def private_messages_router(message: Message):
-
-    """
-    In private:
-    - if admin and has ACTIVE_TICKET -> send to client
-    - if admin without active -> show hint
-    - if client -> normal flow (menu/help)
-    """
-    # ignore commands handled elsewhere
-    if is_command_text(message.text):
-        return
-
-    if is_admin(message.from_user.id):
-        lang = await get_lang(message.from_user.id)
-        ticket_id = ACTIVE_TICKET.get(message.from_user.id)
-
-        if not ticket_id:
-            await message.answer(tr(lang, "hint_admin"))
-            return
-
-        t = await get_ticket(ticket_id)
-        if not t:
-            ACTIVE_TICKET.pop(message.from_user.id, None)
-            await message.answer(tr(lang, "ticket_not_found"))
-            return
-
-        text = (message.text or "").strip()
-        if not text:
-            return
-
-        await log_message(ticket_id, "operator", text)
-
-        client_tg_id = t[1]
-
-        # ✅ DEBUG: показати куди саме відправляємо
-        await message.answer(f"🔎 DEBUG: ticket={ticket_id} -> client_tg_id={client_tg_id}")
-
-        try:
-            await bot.send_message(client_tg_id, f"<b>Doloni Documenti:</b>\n{text}")
-            await message.answer(tr(lang, "sent_ok"))
-        except Exception as e:
-            log.exception("Failed to send message to client %s for ticket %s", client_tg_id, ticket_id)
-            await message.answer(f"❌ Не вдалося надіслати клієнту.\nПомилка: {type(e).__name__}: {e}")
-        return
+from aiogram.enums import ChatType
 
 @dp.message(Command("ticket"))
 async def ticket_info(message: Message):
@@ -933,6 +889,88 @@ async def ticket_info(message: Message):
             reply_markup=kb_ticket_actions(lang, ticket_id)
         )
 
+
+
+# ---------- PRIVATE: ADMIN ----------
+@dp.message(F.chat.type == ChatType.PRIVATE, F.from_user.id.in_(ADMIN_IDS))
+async def private_admin_router(message: Message):
+    if is_command_text(message.text):
+        return
+
+    lang = await get_lang(message.from_user.id)
+    ticket_id = ACTIVE_TICKET.get(message.from_user.id)
+
+    if not ticket_id:
+        await message.answer(tr(lang, "hint_admin"))
+        return
+
+    t = await get_ticket(ticket_id)
+    if not t:
+        ACTIVE_TICKET.pop(message.from_user.id, None)
+        await message.answer(tr(lang, "ticket_not_found"))
+        return
+
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    await log_message(ticket_id, "operator", text)
+
+    client_tg_id = t[1]
+    try:
+        await bot.send_message(client_tg_id, f"<b>Doloni Documenti:</b>\n{text}")
+        await message.answer(tr(lang, "sent_ok"))
+    except Exception as e:
+        log.exception("Failed to send message to client %s for ticket %s", client_tg_id, ticket_id)
+        await message.answer(f"❌ Не вдалося надіслати клієнту.\nПомилка: {type(e).__name__}: {e}")
+
+
+# ---------- PRIVATE: CLIENT ----------
+@dp.message(F.chat.type == ChatType.PRIVATE, ~F.from_user.id.in_(ADMIN_IDS))
+async def private_client_router(message: Message, state: FSMContext):
+    if is_command_text(message.text):
+        return
+
+    # якщо клієнт зараз в FSM (реєстрація / перше повідомлення) — не чіпаємо
+    if await state.get_state() is not None:
+        return
+
+    lang = await get_lang(message.from_user.id)
+
+    open_ticket = await get_open_ticket_by_client(message.from_user.id)
+    if not open_ticket:
+        await message.answer(tr(lang, "select_service"), reply_markup=kb_main_menu(lang))
+        return
+
+    ticket_id = open_ticket[0]
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    await log_message(ticket_id, "client", text)
+
+    client = await get_client(message.from_user.id)
+    phone = client[1] if client else ""
+    surname = client[2] if client else ""
+    name = client[3] if client else ""
+
+    # беремо актуального оператора (якщо вже призначений)
+    t = await get_ticket(ticket_id)
+    assigned_operator_id = t[4] if t else None
+
+    msg_to_ops = tr(lang, "ticket_text_msg", ticket=ticket_id, name=name, surname=surname, phone=phone, msg=text)
+
+    # ✅ 1) завжди в групу операторів (щоб не губилось)
+    if OPERATORS_GROUP_ID != 0:
+        await bot.send_message(OPERATORS_GROUP_ID, msg_to_ops, reply_markup=kb_ticket_actions(lang, ticket_id))
+
+    # ✅ 2) якщо є assigned оператор — ще й в приват оператору + автоактивація чату
+    if assigned_operator_id:
+        try:
+            await bot.send_message(assigned_operator_id, msg_to_ops)
+            ACTIVE_TICKET[assigned_operator_id] = ticket_id
+        except Exception:
+            pass
 
 # =========================
 # FALLBACK: non-private chats (groups etc.)
