@@ -882,12 +882,12 @@ async def ticket_info(message: Message):
             pass
 
     # also notify operators group (so nothing is lost)
-    if OPERATORS_GROUP_ID != 0:
-        await bot.send_message(
-            OPERATORS_GROUP_ID,
-            tr(lang, "ticket_text_msg", ticket=ticket_id, name=name, surname=surname, phone=phone, msg=text),
-            reply_markup=kb_ticket_actions(lang, ticket_id)
-        )
+    # if OPERATORS_GROUP_ID != 0:
+    #     await bot.send_message(
+    #         OPERATORS_GROUP_ID,
+    #         tr(lang, "ticket_text_msg", ticket=ticket_id, name=name, surname=surname, phone=phone, msg=text),
+    #         reply_markup=kb_ticket_actions(lang, ticket_id)
+    #     )
 
 
 
@@ -918,7 +918,7 @@ async def private_admin_router(message: Message):
 
     client_tg_id = t[1]
     try:
-        await bot.send_message(client_tg_id, f"<b>Doloni Documenti:</b>\n{text}")
+        await bot.send_message(client_tg_id, f"{text}")
         await message.answer(tr(lang, "sent_ok"))
     except Exception as e:
         log.exception("Failed to send message to client %s for ticket %s", client_tg_id, ticket_id)
@@ -961,8 +961,8 @@ async def private_client_router(message: Message, state: FSMContext):
     msg_to_ops = tr(lang, "ticket_text_msg", ticket=ticket_id, name=name, surname=surname, phone=phone, msg=text)
 
     # ✅ 1) завжди в групу операторів (щоб не губилось)
-    if OPERATORS_GROUP_ID != 0:
-        await bot.send_message(OPERATORS_GROUP_ID, msg_to_ops, reply_markup=kb_ticket_actions(lang, ticket_id))
+    # if OPERATORS_GROUP_ID != 0:
+    #     await bot.send_message(OPERATORS_GROUP_ID, msg_to_ops, reply_markup=kb_ticket_actions(lang, ticket_id))
 
     # ✅ 2) якщо є assigned оператор — ще й в приват оператору + автоактивація чату
     if assigned_operator_id:
